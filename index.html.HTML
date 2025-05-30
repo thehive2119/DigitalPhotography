@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Digital Photography Guide</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Visualization & Content Choices:
+        - Exposure Triangle: Goal: Understand balance & effects. Viz: Sliders for Aperture/Shutter/ISO with visual feedback for exposure, DoF, motion, noise. Interaction: Adjust sliders, see live updates. Method: Custom JS/HTML/CSS. Justification: Makes abstract concept tangible.
+        - Focal Length: Goal: Visualize FoV changes. Viz: Scene + resizable viewfinder overlay via slider. Interaction: Drag slider. Method: Custom JS/HTML/CSS. Justification: Clarifies optical effect.
+        - Camera Angles/Shot Types: Goal: Illustrate perspectives. Viz: Simple diagrams changing based on selection. Interaction: Click to select. Method: Custom JS/HTML/CSS. Justification: Quick visual understanding.
+        - Three-Point Lighting: Goal: Understand light roles. Viz: Subject diagram with toggleable light effects. Interaction: Toggle lights. Method: Custom JS/HTML/CSS. Justification: Demystifies lighting setup.
+        - Tables (Exposure, Lens, Angles, Shots): Goal: Present structured info. Viz: HTML tables. Interaction: Hover effects. Method: HTML/CSS. Justification: Clear presentation of existing data.
+        No Chart.js or Plotly.js needed for these core interactions. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .interactive-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            min-height: 300px; /* Base height */
+            max-height: 500px; /* Max height */
+            border: 1px solid #e5e7eb; /* Tailwind gray-200 */
+            border-radius: 0.5rem; /* Tailwind rounded-lg */
+            padding: 1rem; /* Tailwind p-4 */
+            background-color: #f9fafb; /* Tailwind gray-50 */
+        }
+        @media (min-width: 768px) { /* Tailwind md breakpoint */
+            .interactive-container {
+                min-height: 350px;
+            }
+        }
+        .control-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500; /* Tailwind font-medium */
+        }
+        .slider {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        .output-indicator {
+            padding: 0.75rem; /* Tailwind p-3 */
+            border-radius: 0.375rem; /* Tailwind rounded-md */
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+        .nav-button {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .sub-nav-button {
+            transition: background-color 0.3s ease, color 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        .sub-nav-button.active {
+            border-left-color: #f59e0b; /* amber-500 */
+            background-color: #fffbeb; /* amber-50 */
+            color: #b45309; /* amber-700 */
+            font-weight: 600;
+        }
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            border-bottom: 1px dotted black;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 220px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -110px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #555 transparent transparent transparent;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* Styles for Three Point Lighting Demo */
+        #threePointSubject {
+            width: 150px;
+            height: 150px;
+            background-color: #d1d5db; /* gray-300 */
+            border-radius: 50%;
+            margin: 20px auto;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+        }
+        .light-effect {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        #keyLightEffect { background: radial-gradient(circle at 30% 30%, rgba(255,255,220,0.7) 0%, rgba(255,255,220,0) 70%); }
+        #fillLightEffect { background: radial-gradient(circle at 70% 50%, rgba(220,220,255,0.5) 0%, rgba(220,220,255,0) 70%); }
+        #backLightEffect { box-shadow: 0 0 15px 5px rgba(255,255,200,0.8), inset 0 0 0px transparent; /* Simulates rim light */ }
+
+        /* Styles for Focal Length Demo */
+        #focalLengthScene {
+            width: 100%;
+            height: 200px;
+            background-color: #bfdbfe; /* blue-200 */
+            background-image:
+                linear-gradient(45deg, #93c5fd 25%, transparent 25%),
+                linear-gradient(-45deg, #93c5fd 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #93c5fd 75%),
+                linear-gradient(-45deg, transparent 75%, #93c5fd 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            position: relative;
+            margin: 20px auto;
+            border: 2px solid #60a5fa; /* blue-400 */
+            overflow: hidden; /* To contain the viewfinder */
+        }
+        #focalLengthViewfinder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 2px solid #ef4444; /* red-500 */
+            background-color: rgba(255,255,255,0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.3s ease, height 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-stone-100 text-neutral-800">
+
+    <header class="bg-amber-600 text-white shadow-lg">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <h1 class="text-3xl font-bold">Mastering Digital Photography: An Interactive Guide</h1>
+            <p class="text-sm text-amber-100">Explore the art and science of digital photography.</p>
+        </div>
+    </header>
+
+    <nav class="bg-white shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-center space-x-2 sm:space-x-4 py-3">
+                <button data-tab="module1" class="nav-button tab-button px-3 py-2 sm:px-4 font-medium text-sm sm:text-base text-neutral-700 hover:bg-amber-100 hover:text-amber-700 rounded-md active">Module 1: Intro</button>
+                <button data-tab="module2" class="nav-button tab-button px-3 py-2 sm:px-4 font-medium text-sm sm:text-base text-neutral-700 hover:bg-amber-100 hover:text-amber-700 rounded-md">Module 2: Gear</button>
+                <button data-tab="module3" class="nav-button tab-button px-3 py-2 sm:px-4 font-medium text-sm sm:text-base text-neutral-700 hover:bg-amber-100 hover:text-amber-700 rounded-md">Module 3: Composition</button>
+                <button data-tab="module4" class="nav-button tab-button px-3 py-2 sm:px-4 font-medium text-sm sm:text-base text-neutral-700 hover:bg-amber-100 hover:text-amber-700 rounded-md">Module 4: Lighting</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div id="module1" class="tab-content active">
+            <h2 class="text-3xl font-semibold text-amber-700 mb-6 border-b-2 border-amber-200 pb-2">Module 1: Introduction to Photography Fundamentals</h2>
+            <p class="mb-6 text-lg text-neutral-700">This module lays the groundwork for understanding photography, from its historical origins to the core concepts that govern how a digital camera captures an image. We'll explore the basic building blocks of digital images and the essential camera settings that form the exposure triangle.</p>
+
+            <div class="grid grid-cols-12 gap-6">
+                <aside class="col-span-12 md:col-span-3">
+                    <nav id="module1-nav" class="space-y-1 sticky top-24">
+                         <button data-section="m1-history" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button active">History of Camera</button>
+                         <button data-section="m1-analog-digital" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Analog vs. Digital</button>
+                         <button data-section="m1-pixels" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Pixels & Resolution</button>
+                         <button data-section="m1-camera-parts" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Camera Parts</button>
+                         <button data-section="m1-exposure-triangle" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Exposure Triangle</button>
+                         <button data-section="m1-white-balance" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">White Balance</button>
+                    </nav>
+                </aside>
+                <div class="col-span-12 md:col-span-9">
+                    <section id="m1-history" class="content-section active  bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">The Journey of Light: From Camera Obscura to Digital Sensors</h3>
+                        <p class="mb-4">Photography's roots extend to the camera obscura ("dark room"), an optical device observed by philosophers like Mo-tzu around 400 BC and later described by figures like Kepler and da Vinci. It demonstrated light passing through a pinhole into a dark space to project an inverted image. This concept is the ancestor of all modern cameras.</p>
+                        <p>The evolution from capturing fleeting images with light to the sophisticated digital sensors of today represents millennia of fascination and innovation in understanding and harnessing light.</p>
+                    </section>
+                    <section id="m1-analog-digital" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Analog vs. Digital Cameras: A Fundamental Shift</h3>
+                        <p class="mb-4">Analog photography uses film and chemical processes, while digital photography employs electronic sensors to convert light into data. Digital files often appear cleaner and sharper, lacking the inherent "grain" of analog film. However, film grain can provide a natural aesthetic when printed, whereas digital images can sometimes look "too clean." Modern high-megapixel digital cameras can surpass traditional film quality, but artistic preference remains subjective.</p>
+                    </section>
+                    <section id="m1-pixels" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">The Digital Image: <span class="tooltip">Pixels<span class="tooltiptext">Tiny squares of color that make up a digital image.</span></span>, <span class="tooltip">Resolution<span class="tooltiptext">The detail an image holds, often measured in DPI or PPI.</span></span>, and Image Types</h3>
+                        <p class="mb-4">Digital images are made of pixels. More pixels generally mean higher quality. Resolution is often expressed in DPI (dots per inch) or PPI (pixels per inch). Raster images (like photos) are pixel-based and can blur if enlarged too much. Vector images (like logos) use math equations and can scale infinitely without quality loss.</p>
+                        <p>Digital photos are typically raster files (JPEG, PNG, GIF). Understanding this helps in image editing and usage across different platforms.</p>
+                    </section>
+                    <section id="m1-camera-parts" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Anatomy of a Digital Camera</h3>
+                        <p class="mb-4">Key parts of a DSLR include:</p>
+                        <ul class="list-disc list-inside space-y-2 mb-4">
+                            <li><strong>Lens:</strong> Gathers light and focuses it onto the sensor. Can be fixed or interchangeable.</li>
+                            <li><strong>Viewfinder:</strong> Allows the photographer to compose the shot. Optical (OVF) in DSLRs shows a direct view; Electronic (EVF) shows a processed image.</li>
+                            <li><strong>Image Sensor:</strong> Converts light into an electronic signal (digital data). CMOS or CCD.</li>
+                            <li><strong>Image Processor:</strong> Converts sensor data into a usable image file, handling color and noise.</li>
+                            <li><strong>Camera Body:</strong> Houses all components.</li>
+                            <li><strong>Shutter Release:</strong> Activates the shutter to expose the sensor.</li>
+                            <li><strong>Mode Dial:</strong> Selects shooting modes (Auto, Manual, Scene modes).</li>
+                            <li><strong>Flash:</strong> Provides additional light.</li>
+                        </ul>
+                        <div class="text-center p-4 border border-dashed border-amber-400 rounded-md bg-amber-50">
+                            <p class="font-semibold text-amber-700">Simplified Camera Diagram (Conceptual)</p>
+                            <div class="mt-2 text-sm text-neutral-600">
+                                [Lens] -> [Aperture] -> [Shutter] -> [Image Sensor] -> [Processor] -> [Storage] <br/>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;^ [Viewfinder]
+                            </div>
+                            <p class="mt-2 text-xs text-neutral-500">(A visual representation using HTML/CSS would be more complex here but this illustrates the idea for now.)</p>
+                        </div>
+                    </section>
+                    <section id="m1-exposure-triangle" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">The Exposure Triangle: Aperture, Shutter Speed, ISO</h3>
+                        <p class="mb-4">This is the heart of photography. These three settings control the brightness of your photo and have creative side effects. Mastering them gives you full control over your images. Try adjusting the sliders below to see how they affect the simulated image!</p>
+
+                        <div class="interactive-container p-4 md:p-6 bg-stone-50 border border-stone-300 rounded-lg shadow-inner">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                                <div id="exposureVisual" class="w-full h-48 md:h-64 bg-gray-300 rounded-md flex flex-col items-center justify-center text-white transition-all duration-300 ease-in-out">
+                                    <p id="brightnessText" class="text-lg font-semibold">Brightness: Normal</p>
+                                    <div class="mt-2 w-3/4 h-20 bg-gray-500 rounded relative overflow-hidden">
+                                        <div id="dofIndicator" class="absolute inset-0 flex items-center justify-center">
+                                            <div id="dofSubject" class="w-1/3 h-12 bg-red-500 opacity-75 rounded transition-all"></div>
+                                            <div id="dofBackground" class="absolute inset-0 bg-gradient-to-r from-transparent via-gray-700 to-transparent opacity-0 transition-all"></div>
+                                        </div>
+                                        <p class="absolute bottom-1 left-2 text-xs">DoF: <span id="dofText">Medium</span></p>
+                                    </div>
+                                    <div class="mt-2 w-3/4 h-8 bg-blue-500 rounded relative flex items-center justify-center">
+                                         <p id="motionText" class="text-xs">Motion: Normal</p>
+                                         <div id="motionBlurIndicator" class="absolute w-1/2 h-1/2 bg-white rounded-full opacity-50 blur-none transition-all"></div>
+                                    </div>
+                                    <p class="mt-1 text-xs">Noise: <span id="noiseText">Low</span></p>
+                                </div>
+
+                                <div class="space-y-4">
+                                    <div>
+                                        <label for="apertureSlider" class="control-label text-stone-700">Aperture (f-stop): <span id="apertureValue">f/5.6</span></label>
+                                        <input type="range" id="apertureSlider" min="0" max="7" value="3" class="slider accent-amber-500">
+                                        <p class="text-xs text-stone-500">Controls light & Depth of Field. Smaller f-number = more light, shallower DoF.</p>
+                                    </div>
+                                    <div>
+                                        <label for="shutterSlider" class="control-label text-stone-700">Shutter Speed: <span id="shutterValue">1/125s</span></label>
+                                        <input type="range" id="shutterSlider" min="0" max="7" value="3" class="slider accent-amber-500">
+                                        <p class="text-xs text-stone-500">Controls light & motion blur. Slower speed = more light, more blur.</p>
+                                    </div>
+                                    <div>
+                                        <label for="isoSlider" class="control-label text-stone-700">ISO: <span id="isoValue">400</span></label>
+                                        <input type="range" id="isoSlider" min="0" max="6" value="2" class="slider accent-amber-500">
+                                        <p class="text-xs text-stone-500">Controls sensor sensitivity & noise. Higher ISO = more light, more noise.</p>
+                                    </div>
+                                </div>
+                            </div>
+                             <div id="exposureReadout" class="mt-4 p-3 bg-amber-100 text-amber-800 rounded-md text-center font-medium">
+                                Current Exposure Value: <span id="evValue">0 EV</span> (Balanced)
+                            </div>
+                        </div>
+                        <p class="mt-4 text-sm text-neutral-600">The relationship is reciprocal: if you change one setting, you might need to adjust another to maintain the same exposure, but with different creative effects.</p>
+                        
+                        <h4 class="text-xl font-semibold text-amber-600 mt-6 mb-2">Table 1: The Exposure Triangle Cheat Sheet</h4>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-stone-200 rounded-md shadow">
+                                <thead class="bg-stone-50">
+                                    <tr>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Setting</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Controls</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Primary Effect on Exposure</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Creative Effect</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Typical Values</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-stone-200">
+                                    <tr>
+                                        <td class="px-4 py-2 whitespace-nowrap font-medium text-stone-800">Aperture</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Size of lens opening (f-stop)</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Amount of light</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Depth of Field</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">f/1.4 (wide) - f/22 (narrow)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 whitespace-nowrap font-medium text-stone-800">Shutter Speed</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Duration shutter is open</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Duration of light</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Motion Blur</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">1/4000s (fast) - 30s (slow)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-2 whitespace-nowrap font-medium text-stone-800">ISO</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Sensor sensitivity to light</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Light amplification</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">Image Noise</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-stone-600">100 (low) - 6400+ (high)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section id="m1-white-balance" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">White Balance (WB): Ensuring True Colors</h3>
+                        <p class="mb-4">White Balance adjusts how colors are rendered so that white objects appear white in your photo, regardless of the color of the light source (e.g., yellowish incandescent light or bluish shade). This prevents unwanted color casts.</p>
+                        <p class="mb-4">For accurate colors, especially in a studio, you can set a custom white balance by photographing a neutral white or grey card under your lighting conditions and using that image as a reference in your camera's WB settings. Auto White Balance (AWB) is convenient for general use.</p>
+                         <div class="mt-4 p-4 border border-dashed border-sky-400 rounded-md bg-sky-50 text-center">
+                            <p class="font-semibold text-sky-700 mb-2">White Balance Simulator (Conceptual)</p>
+                            <div class="flex justify-around items-center">
+                                <div class="w-24 h-24 bg-gray-200 border-2 border-gray-400 flex items-center justify-center text-sm" id="wbSampleOriginal">Original (Neutral)</div>
+                                <div class="w-24 h-24 bg-gray-200 border-2 flex items-center justify-center text-sm" id="wbSampleTungsten" style="background-color: #FFF8E1;">Tungsten Cast</div>
+                                <div class="w-24 h-24 bg-gray-200 border-2 flex items-center justify-center text-sm" id="wbSampleFluorescent" style="background-color: #E0F2F7;">Fluorescent Cast</div>
+                            </div>
+                             <p class="mt-2 text-xs text-neutral-500">(Click buttons below to "correct" the cast)</p>
+                             <div class="mt-2 space-x-2">
+                                 <button class="px-3 py-1 bg-sky-500 text-white text-xs rounded hover:bg-sky-600" onclick="alert('Simulating WB correction for Tungsten...')">Correct Tungsten</button>
+                                 <button class="px-3 py-1 bg-sky-500 text-white text-xs rounded hover:bg-sky-600" onclick="alert('Simulating WB correction for Fluorescent...')">Correct Fluorescent</button>
+                             </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <div id="module2" class="tab-content">
+            <h2 class="text-3xl font-semibold text-amber-700 mb-6 border-b-2 border-amber-200 pb-2">Module 2: Cameras, Lenses, and Essential Accessories</h2>
+            <p class="mb-6 text-lg text-neutral-700">This module explores the tools of the trade. We'll look at different types of digital cameras, delve into the critical role of lenses and focal length, and discuss essential accessories that can elevate your photography. Understanding your gear is key to unlocking its full potential.</p>
+            
+             <div class="grid grid-cols-12 gap-6">
+                <aside class="col-span-12 md:col-span-3">
+                    <nav id="module2-nav" class="space-y-1 sticky top-24">
+                         <button data-section="m2-camera-types" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button active">Camera Types</button>
+                         <button data-section="m2-lenses-focal" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Lenses & Focal Length</button>
+                         <button data-section="m2-lens-types" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Types of Lenses</button>
+                         <button data-section="m2-camera-settings" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Advanced Settings</button>
+                         <button data-section="m2-accessories" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Accessories</button>
+                         <button data-section="m2-genres" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Photographic Genres</button>
+                    </nav>
+                </aside>
+                <div class="col-span-12 md:col-span-9">
+                    <section id="m2-camera-types" class="content-section active bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Choosing Your Tool: Types of Digital Cameras</h3>
+                        <p class="mb-2"><strong>Point-and-shoot:</strong> Simple, portable, good for casual use. Many now have high megapixels and zoom.</p>
+                        <p class="mb-2"><strong>High-end consumer:</strong> Bridge the gap, more manual control, often larger sensors or fixed high-quality lenses.</p>
+                        <p class="mb-2"><strong>DSLR (Digital Single-Lens Reflex):</strong> Optical viewfinders, interchangeable lenses, larger sensors, great control. Popular for serious learners.</p>
+                        <p>Smartphones have largely replaced basic interchangeable-lens cameras, pushing dedicated cameras to higher-end niches.</p>
+                    </section>
+                    <section id="m2-lenses-focal" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">The Photographer's Eye: Lenses and <span class="tooltip">Focal Length<span class="tooltiptext">Distance (mm) from lens optical center to sensor when focused at infinity. Affects field of view & magnification.</span></span></h3>
+                        <p class="mb-4">Focal length (mm) dictates field of view (how much you see) and magnification.</p>
+                        <ul class="list-disc list-inside space-y-1 mb-4">
+                            <li>Shorter focal lengths (e.g., 18mm, 24mm) = wider angle of view (landscapes).</li>
+                            <li>Longer focal lengths (e.g., 70mm, 200mm) = narrower angle, magnifies distant subjects (wildlife, sports).</li>
+                            <li>35mm-85mm are often "standard" lenses, similar to human eye view.</li>
+                        </ul>
+                        <p class="mb-4">APS-C ("crop frame") sensors have a crop factor, making lenses appear to have a longer focal length (e.g., a 50mm lens on a 1.6x crop sensor acts like an 80mm lens).</p>
+                        
+                        <div class="interactive-container p-4 md:p-6 bg-stone-50 border border-stone-300 rounded-lg shadow-inner">
+                            <h4 class="text-xl font-semibold text-stone-700 mb-3 text-center">Focal Length Visualizer</h4>
+                            <div>
+                                <label for="focalLengthSlider" class="control-label text-stone-700">Focal Length: <span id="focalLengthValue">50mm</span> (<span id="focalLengthType">Standard</span>)</label>
+                                <input type="range" id="focalLengthSlider" min="10" max="300" value="50" class="slider accent-sky-500">
+                            </div>
+                            <div id="focalLengthScene" class="rounded-md">
+                                <div id="focalLengthViewfinder"></div>
+                            </div>
+                            <p class="text-xs text-stone-500 mt-2 text-center">Adjust the slider to see how the field of view changes. Shorter focal lengths give a wider view, longer ones "zoom in."</p>
+                        </div>
+                    </section>
+                    <section id="m2-lens-types" class="content-section bg-white p-6 rounded-lg shadow">
+                         <h3 class="text-2xl font-semibold text-amber-600 mb-4">Types of Lenses</h3>
+                         <p class="mb-4">Lenses are specialized. Understanding their types helps you choose the right tool for your vision.</p>
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-stone-200 rounded-md shadow">
+                                <thead class="bg-stone-50">
+                                    <tr>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Lens Type</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Typical Focal Length (mm)</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Key Characteristics</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Ideal Applications</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-stone-200">
+                                    <tr><td class="px-4 py-2 font-medium">Prime</td><td class="px-4 py-2">Fixed (e.g., 50mm)</td><td class="px-4 py-2">Faster, sharper, lighter</td><td class="px-4 py-2">Portraits, low-light, artistic blur</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Zoom</td><td class="px-4 py-2">Variable (e.g., 24-70mm)</td><td class="px-4 py-2">Flexible, versatile</td><td class="px-4 py-2">Events, travel, general purpose</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Macro</td><td class="px-4 py-2">Medium (e.g., 40-105mm)</td><td class="px-4 py-2">Extreme close-ups, high detail</td><td class="px-4 py-2">Nature (insects/flowers), products</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Wide-Angle</td><td class="px-4 py-2">Short (e.g., &lt;35mm)</td><td class="px-4 py-2">Expansive view</td><td class="px-4 py-2">Landscapes, architecture, street</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Telephoto</td><td class="px-4 py-2">Long (e.g., &gt;70mm)</td><td class="px-4 py-2">Subject isolation, magnification</td><td class="px-4 py-2">Wildlife, sports, distant portraits</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Standard</td><td class="px-4 py-2">Normal (e.g., 35-85mm)</td><td class="px-4 py-2">Versatile, natural perspective</td><td class="px-4 py-2">Everyday shooting, street</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="mt-4 text-sm text-neutral-600">Specialty lenses like Tilt-Shift also exist for unique perspective control.</p>
+                    </section>
+                    <section id="m2-camera-settings" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Mastering Camera Settings: Sunny 16 & Metering</h3>
+                        <p class="mb-3"><strong>Sunny 16 Rule:</strong> A classic guideline for manual exposure in bright sun without a light meter. Set aperture to f/16, ISO to 100, and shutter speed to 1/100s (or 1/ISO). Adjust for different conditions (e.g., f/8 for cloudy).</p>
+                        <p class="mb-1"><strong>Metering Modes:</strong> How your camera measures light to determine exposure.</p>
+                        <ul class="list-disc list-inside space-y-1 mb-3">
+                            <li><strong>Evaluative/Matrix:</strong> Averages light from entire scene. Good for evenly lit scenes.</li>
+                            <li><strong>Center-Weighted:</strong> Prioritizes center of frame. Good for portraits where subject is centered and brighter/darker than background.</li>
+                            <li><strong>Spot:</strong> Measures light from a very small area. Precise, good for high contrast or small subjects.</li>
+                        </ul>
+                        <p class="text-sm text-neutral-600">These settings give you finer control, especially when auto modes might be fooled.</p>
+                    </section>
+                    <section id="m2-accessories" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Beyond the Camera: Essential Accessories</h3>
+                        <p class="mb-2"><strong>Tripods:</strong> Provide stability for sharp images, long exposures, precise composition. Consider strength, payload, material (aluminum/carbon fiber), head type (ball, pan-tilt, geared, fluid).</p>
+                        <p class="mb-2"><strong>Speedlights:</strong> Portable external flashes. Offer versatile lighting control (TTL, manual, strobe).</p>
+                        <p class="mb-2"><strong>Reflectors:</strong> Modify light (natural or flash) to soften it or fill shadows. Surfaces: White (soft fill), Silver (brighter fill), Gold (warm tones).</p>
+                        <p class="text-sm text-neutral-600">Accessories enhance quality and creative options.</p>
+                    </section>
+                    <section id="m2-genres" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Exploring Photographic Genres</h3>
+                        <p class="mb-4">Photography is diverse. Each genre has unique demands:</p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><strong>Wedding:</strong> Capturing emotion and events. Zoom lenses often used.</li>
+                            <li><strong>Wildlife:</strong> Patience, dedication, telephoto lenses.</li>
+                            <li><strong>Portrait:</strong> Character, personality. High demand due to social media. Shallow DoF common.</li>
+                            <li><strong>Street:</strong> Candid public moments. Wide/standard lenses.</li>
+                            <li><strong>Architecture:</strong> Buildings, structures. Wide-angle lenses.</li>
+                            <li><strong>Product:</strong> Detail, lighting. Macro lenses for close-ups.</li>
+                        </ul>
+                        <p class="mt-2 text-sm text-neutral-600">Others: Landscape, Sports, Still Life. Photographers often specialize.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <div id="module3" class="tab-content">
+            <h2 class="text-3xl font-semibold text-amber-700 mb-6 border-b-2 border-amber-200 pb-2">Module 3: Mastering Framing and Composition</h2>
+            <p class="mb-6 text-lg text-neutral-700">Composition is the art of arranging elements within your photo to create a balanced, meaningful, and impactful image. This module covers foundational rules and techniques to guide the viewer's eye and tell a compelling visual story. We'll also explore how camera angles and shot types influence perception.</p>
+             <div class="grid grid-cols-12 gap-6">
+                <aside class="col-span-12 md:col-span-3">
+                    <nav id="module3-nav" class="space-y-1 sticky top-24">
+                         <button data-section="m3-composition-principles" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button active">Composition Principles</button>
+                         <button data-section="m3-camera-angles" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Camera Angles</button>
+                         <button data-section="m3-shot-types" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Shot Types</button>
+                    </nav>
+                </aside>
+                <div class="col-span-12 md:col-span-9">
+                    <section id="m3-composition-principles" class="content-section active bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">The Art of Arrangement: Foundational Composition Principles</h3>
+                        <p class="mb-3"><strong>Rule of Thirds:</strong> Divide frame into a 3x3 grid. Place key elements on lines or intersections for more dynamic images than centering.</p>
+                        <p class="mb-3"><strong>Headroom:</strong> Space between top of subject's head and frame top. Too much makes subject look small; too little feels cramped. Eyes often on upper third line.</p>
+                        <p class="mb-3"><strong>Look Room (Lead/Nose Room):</strong> Space in direction subject is looking/moving. Prevents "running into frame" feel.</p>
+                        <p class="mb-3"><strong>Leading Lines:</strong> Use lines (roads, fences) to draw viewer's eye to subject or through frame.</p>
+                        <p class="mb-3"><strong>Framing within the Frame:</strong> Use elements (doorways, arches) to create an internal frame around subject, adding depth.</p>
+                        <p class="text-sm text-neutral-600">These are guidelines, not strict rules. Understand them to know when to break them purposefully.</p>
+                    </section>
+                    <section id="m3-camera-angles" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Perspective and Impact: Understanding Camera Angles</h3>
+                        <p class="mb-4">Camera angle (height/position relative to subject) conveys emotion and power dynamics.</p>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-stone-200 rounded-md shadow">
+                                <thead class="bg-stone-50">
+                                    <tr>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Camera Angle</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Position</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Effect/Perception</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-stone-200">
+                                    <tr><td class="px-4 py-2 font-medium">Low Angle</td><td class="px-4 py-2">Below, looking up</td><td class="px-4 py-2">Dominance, power, heroism</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Eye Level</td><td class="px-4 py-2">At subject's eye level</td><td class="px-4 py-2">Connection, neutrality</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">High Angle</td><td class="px-4 py-2">Above, looking down</td><td class="px-4 py-2">Vulnerability, depowerment</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Bird's Eye View</td><td class="px-4 py-2">Directly above</td><td class="px-4 py-2">Objectivity, scale, diminishing</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Dutch Angle (Tilt)</td><td class="px-4 py-2">Camera tilted off-axis</td><td class="px-4 py-2">Unease, disorientation</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="mt-3 text-sm text-neutral-600"><strong>Subjective angles</strong> mimic POV; <strong>objective angles</strong> offer detached views.</p>
+                    </section>
+                     <section id="m3-shot-types" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Telling the Story: Types of Shots</h3>
+                        <p class="mb-4">Shot types control how much subject and environment are visible, influencing narrative and emotion.</p>
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-stone-200 rounded-md shadow">
+                                <thead class="bg-stone-50">
+                                    <tr>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Shot Type</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Framing/Focus</th>
+                                        <th class="px-4 py-2 border-b text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Narrative/Emotional Purpose</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-stone-200">
+                                    <tr><td class="px-4 py-2 font-medium">Extreme Long Shot (ELS)</td><td class="px-4 py-2">Environment dominant, subject tiny</td><td class="px-4 py-2">Establish setting, show scale</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Long Shot (LS)</td><td class="px-4 py-2">Full body, significant environment</td><td class="px-4 py-2">Set scene, show character's place</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Medium Shot (MS)</td><td class="px-4 py-2">Waist up, some environment</td><td class="px-4 py-2">Dialogue, body language</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Medium Close-Up (MCU)</td><td class="px-4 py-2">Chest up, focus on expression</td><td class="px-4 py-2">Character emotion</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Close-Up (CU)</td><td class="px-4 py-2">Face/Object detail, fills frame</td><td class="px-4 py-2">Convey emotion, highlight details</td></tr>
+                                    <tr><td class="px-4 py-2 font-medium">Extreme Close-Up (ECU)</td><td class="px-4 py-2">Extreme facial/object detail</td><td class="px-4 py-2">Intense emotion, critical details</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="mt-3 text-sm text-neutral-600">Others: Master shots, Cut-ins/Inserts, Point-of-View (POV) shots.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <div id="module4" class="tab-content">
+            <h2 class="text-3xl font-semibold text-amber-700 mb-6 border-b-2 border-amber-200 pb-2">Module 4: Basics of Photography and Lighting</h2>
+            <p class="mb-6 text-lg text-neutral-700">This final module delves into the nuances of focus, lens characteristics, and the critical role of lighting. Understanding how light behaves and how to control it—whether natural or artificial—is fundamental to shaping the mood and quality of your photographs.</p>
+             <div class="grid grid-cols-12 gap-6">
+                <aside class="col-span-12 md:col-span-3">
+                    <nav id="module4-nav" class="space-y-1 sticky top-24">
+                         <button data-section="m4-dof-lens" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button active">Depth of Field & Lens</button>
+                         <button data-section="m4-aperture-shutter" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Aperture/Shutter Relationship</button>
+                         <button data-section="m4-shutter-types" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Shutter Types</button>
+                         <button data-section="m4-lighting-concepts" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Lighting Concepts</button>
+                         <button data-section="m4-light-sources" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Light Sources</button>
+                         <button data-section="m4-three-point" class="module-section-button w-full text-left px-4 py-2 text-neutral-600 hover:bg-amber-50 hover:text-amber-600 rounded-md sub-nav-button">Three-Point Lighting</button>
+                    </nav>
+                </aside>
+                 <div class="col-span-12 md:col-span-9">
+                    <section id="m4-dof-lens" class="content-section active bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Depth of Focus (Depth of Field) and Lens Characteristics</h3>
+                        <p class="mb-3"><strong>Depth of Field (DoF):</strong> Range of distance in a photo where subjects appear acceptably sharp. Controlled by aperture.</p>
+                        <ul class="list-disc list-inside space-y-1 mb-3">
+                            <li>Wide aperture (small f-number, e.g., f/1.8) = Shallow DoF (blurry background).</li>
+                            <li>Narrow aperture (large f-number, e.g., f/16) = Deep DoF (more in focus).</li>
+                        </ul>
+                        <p class="mb-3"><strong>Lens Focal Length:</strong> Distance from lens optical center to sensor (focal plane) when focused at infinity. Determines angle of coverage and magnification.</p>
+                    </section>
+                    <section id="m4-aperture-shutter" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Setting Aperture and Shutter: Arithmetic and Relationship</h3>
+                        <p class="mb-3">Aperture and shutter speed have a reciprocal relationship. The same amount of light can be achieved with different combinations (e.g., 1/30s at f/5.6 = 1/8s at f/11).</p>
+                        <p class="mb-3">A "full stop" doubles or halves the amount of light. If you slow shutter speed by one stop (doubling light time), you'd narrow aperture by one stop (halving light amount) to maintain exposure but change creative effects (DoF vs. motion blur).</p>
+                    </section>
+                    <section id="m4-shutter-types" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Types of Shutters</h3>
+                        <p class="mb-2"><strong>Focal Plane Shutters:</strong> In camera body, in front of sensor. Two curtains.
+                            <br><em>Pros:</em> Very fast speeds (1/4000s+), good for freezing action.
+                            <br><em>Cons:</em> Slower flash sync, can cause "rolling shutter" distortion, more mechanical wear.
+                        </p>
+                        <p class="mb-2"><strong>Leaf Shutters:</strong> In the lens, like aperture blades.
+                            <br><em>Pros:</em> Flash sync at all speeds (good for studio strobes), quieter, no rolling shutter.
+                            <br><em>Cons:</em> Slower max speeds (often ~1/500s), lenses can be heavier/have smaller max apertures.
+                        </p>
+                    </section>
+                    <section id="m4-lighting-concepts" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">General Lighting Concepts</h3>
+                        <p class="mb-2"><strong>Foot-candles/Lux:</strong> Units for light intensity. (Foot-candle = 1 lumen/sq ft; Lux = 1 lumen/sq m).</p>
+                        <p class="mb-2"><strong>Kelvin (K):</strong> Measures color temperature (warmth/coolness of light).
+                            <br>Lower K (2000-3000K) = warmer (red/yellow). Higher K (7000-8000K) = cooler (blue).
+                            <br>Midday sun ~5500K (neutral). Golden hour (sunrise/sunset) ~2000-3000K. Cloudy ~7000-8000K.
+                        </p>
+                        <p class="mb-2"><strong>Color Rendering Index (CRI):</strong> How naturally colors appear under artificial light vs. sunlight. Higher CRI = more accurate color.</p>
+                        <div class="mt-4 p-3 bg-sky-50 border border-sky-300 rounded-md">
+                            <p class="font-semibold text-sky-700 text-center">Kelvin Scale (Conceptual)</p>
+                            <div class="w-full h-8 mt-2 rounded-md flex overflow-hidden">
+                                <div class="flex-1 bg-red-400 flex items-center justify-center text-xs text-white">2000K</div>
+                                <div class="flex-1 bg-orange-400 flex items-center justify-center text-xs text-white">3000K</div>
+                                <div class="flex-1 bg-yellow-300 flex items-center justify-center text-xs text-neutral-800">4000K</div>
+                                <div class="flex-1 bg-white flex items-center justify-center text-xs text-neutral-800 border-l border-r border-gray-300">5500K</div>
+                                <div class="flex-1 bg-sky-200 flex items-center justify-center text-xs text-neutral-800">6500K</div>
+                                <div class="flex-1 bg-sky-400 flex items-center justify-center text-xs text-white">8000K</div>
+                            </div>
+                        </div>
+                    </section>
+                    <section id="m4-light-sources" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Natural and Artificial Light Sources</h3>
+                        <p class="mb-2"><strong>Natural Light (Sun):</strong>
+                            <br><em>Pros:</em> Authentic, free, diverse moods (golden hour, overcast). Minimal extra gear.
+                            <br><em>Cons:</em> Unpredictable, changes intensity/color, location/time dependent. Midday sun can be harsh.
+                        </p>
+                        <p class="mb-2"><strong>Artificial Light (Lamps, Flash):</strong>
+                            <br><em>Pros:</em> Full control over intensity, direction, color, quality. Ideal for studio/product.
+                            <br><em>Cons:</em> Can be expensive, needs power, requires knowledge to use effectively.
+                        </p>
+                    </section>
+                    <section id="m4-three-point" class="content-section bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-2xl font-semibold text-amber-600 mb-4">Basic Portrait Lighting: <span class="tooltip">Three-Point Lighting<span class="tooltiptext">A standard method using three light sources: Key, Fill, and Backlight.</span></span></h3>
+                        <p class="mb-4">A fundamental setup for portraits and products to add depth and dimension.</p>
+                        <div class="interactive-container p-4 md:p-6 bg-stone-50 border border-stone-300 rounded-lg shadow-inner">
+                            <h4 class="text-xl font-semibold text-stone-700 mb-3 text-center">Three-Point Lighting Demo</h4>
+                            <div id="threePointSubjectContainer" class="flex justify-center items-center mb-4">
+                                <div id="threePointSubject">
+                                    <div id="keyLightEffect" class="light-effect"></div>
+                                    <div id="fillLightEffect" class="light-effect"></div>
+                                    <div id="backLightEffect" class="light-effect"></div>
+                                </div>
+                            </div>
+                            <div class="space-y-2 text-center">
+                                <button id="toggleKeyLight" class="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-yellow-800 rounded-md text-sm shadow">Toggle Key Light</button>
+                                <button id="toggleFillLight" class="px-4 py-2 bg-blue-400 hover:bg-blue-500 text-blue-800 rounded-md text-sm shadow">Toggle Fill Light</button>
+                                <button id="toggleBackLight" class="px-4 py-2 bg-orange-400 hover:bg-orange-500 text-orange-800 rounded-md text-sm shadow">Toggle Back Light</button>
+                            </div>
+                             <p class="mt-4 text-xs text-stone-500 text-center">Click the buttons to see the effect of each light on the subject.</p>
+                        </div>
+                        <ol class="list-decimal list-inside space-y-2 mt-4">
+                            <li><strong>Key Light:</strong> Main, brightest light. Usually 45° to subject, above eye level. Defines form, sets mood.</li>
+                            <li><strong>Fill Light:</strong> Opposite key light, softer. Softens key light's shadows.</li>
+                            <li><strong>Backlight (Rim/Hair Light):</strong> Behind subject. Separates subject from background with a rim of light, adds depth.</li>
+                        </ol>
+                        <p class="mt-3 text-sm text-neutral-600">Adjust intensities for balance. Key dominates, Fill softens, Backlight contours.</p>
+                    </section>
+                 </div>
+            </div>
+        </div>
+        
+        <section class="mt-12 bg-white p-6 rounded-lg shadow">
+            <h2 class="text-2xl font-semibold text-amber-700 mb-4">Conclusions</h2>
+            <p class="text-neutral-700 leading-relaxed">
+                Digital photography is a sophisticated blend of art and science. This guide has covered its history, the shift from analog to digital, image fundamentals, camera anatomy, the crucial exposure triangle, lens technology, essential accessories, diverse genres, composition principles, and lighting techniques. Mastering these elements empowers photographers to move beyond automatic settings and craft compelling visual narratives with precision and creative intent. The journey of learning is continuous, but a solid grasp of these fundamentals is the key to unlocking your photographic potential.
+            </p>
+        </section>
+
+    </main>
+
+    <footer class="mt-12 py-8 bg-neutral-800 text-neutral-300 text-center">
+        <p>&copy; <span id="currentYear"></span> Interactive Photography Guide. For educational purposes.</p>
+    </footer>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const moduleNavs = {
+            module1: document.getElementById('module1-nav'),
+            module2: document.getElementById('module2-nav'),
+            module3: document.getElementById('module3-nav'),
+            module4: document.getElementById('module4-nav'),
+        };
+
+        function switchTab(targetTabId) {
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === targetTabId) {
+                    content.classList.add('active');
+                }
+            });
+            tabButtons.forEach(button => {
+                button.classList.remove('active', 'bg-amber-100', 'text-amber-700', 'font-semibold');
+                if (button.dataset.tab === targetTabId) {
+                    button.classList.add('active', 'bg-amber-100', 'text-amber-700', 'font-semibold');
+                }
+            });
+            // Activate the first section in the newly opened tab
+            const activeModuleNav = moduleNavs[targetTabId];
+            if (activeModuleNav) {
+                const firstSectionButton = activeModuleNav.querySelector('.module-section-button');
+                if (firstSectionButton) {
+                    switchSection(targetTabId, firstSectionButton.dataset.section);
+                }
+            }
+        }
+        
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                switchTab(button.dataset.tab);
+            });
+        });
+
+        function switchSection(moduleId, targetSectionId) {
+            const currentModuleContent = document.getElementById(moduleId);
+            if (!currentModuleContent) return;
+
+            currentModuleContent.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            const targetSection = currentModuleContent.querySelector('#' + targetSectionId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+            }
+
+            const currentModuleNav = moduleNavs[moduleId];
+            if (currentModuleNav) {
+                currentModuleNav.querySelectorAll('.module-section-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.section === targetSectionId) {
+                        btn.classList.add('active');
+                    }
+                });
+            }
+        }
+
+        Object.keys(moduleNavs).forEach(moduleId => {
+            const nav = moduleNavs[moduleId];
+            if (nav) {
+                nav.querySelectorAll('.module-section-button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        switchSection(moduleId, button.dataset.section);
+                    });
+                });
+            }
+        });
+
+        // Initialize first tab and its first section
+        switchTab('module1');
+
+
+        // Exposure Triangle Simulator
+        const apertureSlider = document.getElementById('apertureSlider');
+        const shutterSlider = document.getElementById('shutterSlider');
+        const isoSlider = document.getElementById('isoSlider');
+        const apertureValueDisplay = document.getElementById('apertureValue');
+        const shutterValueDisplay = document.getElementById('shutterValue');
+        const isoValueDisplay = document.getElementById('isoValue');
+        const exposureVisual = document.getElementById('exposureVisual');
+        const brightnessText = document.getElementById('brightnessText');
+        const dofIndicator = document.getElementById('dofIndicator');
+        const dofSubject = document.getElementById('dofSubject');
+        const dofBackground = document.getElementById('dofBackground');
+        const dofText = document.getElementById('dofText');
+        const motionText = document.getElementById('motionText');
+        const motionBlurIndicator = document.getElementById('motionBlurIndicator');
+        const noiseText = document.getElementById('noiseText');
+        const evValueDisplay = document.getElementById('evValue');
+
+        const apertureStops = ["f/1.4", "f/2", "f/2.8", "f/4", "f/5.6", "f/8", "f/11", "f/16"];
+        // EV values relative to f/5.6, 1/125s, ISO 100 as 0 EV (approx)
+        // Aperture: f/1.4 (+4), f/2 (+3), f/2.8 (+2), f/4 (+1), f/5.6 (0), f/8 (-1), f/11 (-2), f/16 (-3)
+        const apertureEvValues = [4, 3, 2, 1, 0, -1, -2, -3]; 
+        
+        const shutterSpeeds = ["1/4000s", "1/1000s", "1/500s", "1/125s", "1/60s", "1/30s", "1/15s", "1/2s"];
+        // Shutter: 1/4000s (-5), 1/1000s (-3), 1/500s (-2), 1/125s (0), 1/60s (+1), 1/30s (+2), 1/15s (+3), 1/2s (+6)
+        const shutterEvValues = [-5, -3, -2, 0, 1, 2, 3, 6];
+
+        const isoValues = ["100", "200", "400", "800", "1600", "3200", "6400"];
+        // ISO: 100 (0), 200 (+1), 400 (+2), 800 (+3), 1600 (+4), 3200 (+5), 6400 (+6)
+        const isoEvValues = [0, 1, 2, 3, 4, 5, 6];
+
+        function updateExposureTriangle() {
+            const apertureIdx = parseInt(apertureSlider.value);
+            const shutterIdx = parseInt(shutterSlider.value);
+            const isoIdx = parseInt(isoSlider.value);
+
+            apertureValueDisplay.textContent = apertureStops[apertureIdx];
+            shutterValueDisplay.textContent = shutterSpeeds[shutterIdx];
+            isoValueDisplay.textContent = isoValues[isoIdx];
+
+            // Calculate Exposure Value (EV) - simplified
+            // Base EV values are somewhat arbitrary for this demo, focusing on relative changes.
+            // A "correct" exposure here is considered around 0 EV.
+            let currentEV = apertureEvValues[apertureIdx] + shutterEvValues[shutterIdx] + isoEvValues[isoIdx];
+            
+            // Adjust base EV: f/5.6 (idx 4, EV 0), 1/125s (idx 3, EV 0), ISO 400 (idx 2, EV +2)
+            // To make default settings (f/5.6, 1/125s, ISO400) near 0 EV for the demo
+            // The sum of defaults is 0 (ap) + 0 (sh) + 2 (iso) = +2. Let's normalize this.
+            // This is a simplified model. Real EV calculation is more complex.
+            // For the demo, we'll aim for values around -2 to +2 for "good" exposure.
+            // The default values sum to apertureEvValues[4] + shutterEvValues[3] + isoEvValues[2] = 0 + 0 + 2 = 2.
+            // To center around 0, we can subtract 2 from this sum.
+             currentEV = currentEV - 2; // Normalizing factor based on default values' EV sum.
+
+
+            // Update Brightness Visual
+            let brightnessDesc = "Normal";
+            if (currentEV < -1.5) {
+                exposureVisual.style.backgroundColor = `rgb(50,50,50)`; // Darker
+                brightnessText.textContent = "Too Dark";
+                brightnessDesc = "Underexposed";
+            } else if (currentEV < -0.5) {
+                exposureVisual.style.backgroundColor = `rgb(100,100,100)`; // Slightly Dark
+                brightnessText.textContent = "Slightly Dark";
+                brightnessDesc = "Slightly Underexposed";
+            } else if (currentEV > 1.5) {
+                exposureVisual.style.backgroundColor = `rgb(220,220,220)`; // Brighter
+                brightnessText.textContent = "Too Bright";
+                brightnessDesc = "Overexposed";
+            } else if (currentEV > 0.5) {
+                exposureVisual.style.backgroundColor = `rgb(180,180,180)`; // Slightly Bright
+                brightnessText.textContent = "Slightly Bright";
+                brightnessDesc = "Slightly Overexposed";
+            } else {
+                exposureVisual.style.backgroundColor = `rgb(150,150,150)`; // Normal
+                brightnessText.textContent = "Good Exposure";
+                brightnessDesc = "Balanced";
+            }
+             evValueDisplay.textContent = `${currentEV.toFixed(1)} EV (${brightnessDesc})`;
+
+
+            // Update Depth of Field Visual (based on aperture)
+            // Lower index = wider aperture = shallower DoF
+            const dofLevels = ["Very Shallow", "Shallow", "Medium Shallow", "Medium", "Medium Deep", "Deep", "Very Deep", "Extremely Deep"];
+            dofText.textContent = dofLevels[apertureIdx];
+            // Visual: Wider aperture (lower index) = more blur for background
+            const backgroundBlurAmount = (7 - apertureIdx) * 5; // Max blur 35px
+            dofBackground.style.opacity = `${(7 - apertureIdx) / 10 + 0.1}`; // More opacity for blur effect
+            dofSubject.style.filter = `blur(0px)`; // Subject always sharp in this basic demo
+            dofIndicator.style.backdropFilter = `blur(${backgroundBlurAmount / 7}px)`; // Subtle blur on container
+
+            // Update Motion Blur Visual (based on shutter speed)
+            // Higher index = slower shutter = more blur
+            const motionLevels = ["Frozen Solid", "Frozen", "Slight Freeze", "Normal", "Slight Blur", "Motion Blur", "Heavy Blur", "Extreme Blur"];
+            motionText.textContent = motionLevels[shutterIdx];
+            // Visual: Slower shutter (higher index) = more blur for motion indicator
+            const motionBlurAmount = shutterIdx * 2; // Max blur 14px
+            motionBlurIndicator.style.filter = `blur(${motionBlurAmount}px)`;
+            motionBlurIndicator.style.width = `${50 + shutterIdx * 5}%`; // Elongate for blur
+
+
+            // Update Noise Visual (based on ISO)
+            // Higher index = higher ISO = more noise
+            const noiseLevels = ["Clean", "Very Low", "Low", "Moderate", "Noticeable", "High", "Very High"];
+            noiseText.textContent = noiseLevels[isoIdx];
+            // Visual: Add a subtle noise pattern that increases with ISO
+            if (isoIdx > 2) { // Start showing noticeable "noise" effect
+                const noiseOpacity = (isoIdx - 2) * 0.15; // Max opacity ~0.6
+                exposureVisual.style.backgroundImage = `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='10' height='10' fill='rgba(0,0,0,${noiseOpacity})'/%3E%3C/svg%3E")`;
+            } else {
+                exposureVisual.style.backgroundImage = 'none';
+            }
+        }
+
+        apertureSlider.addEventListener('input', updateExposureTriangle);
+        shutterSlider.addEventListener('input', updateExposureTriangle);
+        isoSlider.addEventListener('input', updateExposureTriangle);
+        updateExposureTriangle(); // Initial call
+
+        // Three Point Lighting Demo
+        const keyLightEffect = document.getElementById('keyLightEffect');
+        const fillLightEffect = document.getElementById('fillLightEffect');
+        const backLightEffect = document.getElementById('backLightEffect');
+
+        document.getElementById('toggleKeyLight').addEventListener('click', () => {
+            keyLightEffect.style.opacity = keyLightEffect.style.opacity === '1' ? '0' : '1';
+        });
+        document.getElementById('toggleFillLight').addEventListener('click', () => {
+            fillLightEffect.style.opacity = fillLightEffect.style.opacity === '1' ? '0' : '1';
+        });
+        document.getElementById('toggleBackLight').addEventListener('click', () => {
+            backLightEffect.style.opacity = backLightEffect.style.opacity === '1' ? '0' : '1';
+        });
+
+        // Focal Length Demo
+        const focalLengthSlider = document.getElementById('focalLengthSlider');
+        const focalLengthValueDisplay = document.getElementById('focalLengthValue');
+        const focalLengthTypeDisplay = document.getElementById('focalLengthType');
+        const focalLengthViewfinder = document.getElementById('focalLengthViewfinder');
+        const focalLengthScene = document.getElementById('focalLengthScene');
+
+        focalLengthSlider.addEventListener('input', () => {
+            const focalLength = parseInt(focalLengthSlider.value);
+            focalLengthValueDisplay.textContent = `${focalLength}mm`;
+
+            let type = "Standard";
+            if (focalLength < 35) type = "Wide-Angle";
+            else if (focalLength > 85 && focalLength <=135) type = "Short Telephoto";
+            else if (focalLength > 135) type = "Telephoto";
+            focalLengthTypeDisplay.textContent = type;
+
+            // Calculate viewfinder size based on focal length.
+            // This is a very simplified representation. Inverse relationship: longer focal length = smaller FoV.
+            const sceneWidth = focalLengthScene.offsetWidth;
+            const sceneHeight = focalLengthScene.offsetHeight;
+            
+            // Max FoV at 10mm (widest), Min FoV at 300mm (longest)
+            // Let's map focal length to a percentage of scene size.
+            // Base FoV (e.g., at 50mm) could be 50% of scene width.
+            // Wider lens (10mm) could be 90%. Tele (300mm) could be 10%.
+            const minFocal = 10;
+            const maxFocal = 300;
+            const minFoVPercent = 0.15; // 15% for 300mm
+            const maxFoVPercent = 0.9;  // 90% for 10mm
+
+            // Linear interpolation (inverted)
+            const normalizedFocal = (focalLength - minFocal) / (maxFocal - minFocal); // 0 to 1
+            const fovPercent = maxFoVPercent - (normalizedFocal * (maxFoVPercent - minFoVPercent));
+            
+            const viewfinderWidth = sceneWidth * fovPercent;
+            const viewfinderHeight = sceneHeight * fovPercent;
+
+            focalLengthViewfinder.style.width = `${viewfinderWidth}px`;
+            focalLengthViewfinder.style.height = `${viewfinderHeight}px`;
+        });
+        // Initial call for focal length
+        focalLengthSlider.dispatchEvent(new Event('input'));
+
+
+    </script>
+</body>
+</html>
